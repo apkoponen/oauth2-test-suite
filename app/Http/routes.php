@@ -16,3 +16,13 @@ use App\Http\Controllers\Controller;
 Route::get('/', function () {
   return view('welcome');
 });
+
+Route::group(['prefix' => 'server'], function () {
+  Route::get('authorize', 'ServerController@getAuthorize');
+  Route::get('token', 'ServerController@getToken');
+  Route::get('results', 'ServerController@getResults');
+});
+
+Route::group(['prefix' => 'client'], function () {
+  Route::get('tests', 'ClientController@getTests');
+});
