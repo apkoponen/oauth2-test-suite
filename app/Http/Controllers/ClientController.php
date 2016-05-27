@@ -368,7 +368,7 @@ class ClientController extends Controller
   private function testbruteforceClientCredentials($testName, Request $request)
   {
     $test                       = Test::describe($testName,
-            'When trying to brute force client ID');
+            'When trying to brute-force client ID');
     $testParameters             = $this->validTestParameters;
     $testParameters['clientId'] = $this->fakeClient['clientId'];
     $provider                   = new OAuth2Provider($testParameters);
