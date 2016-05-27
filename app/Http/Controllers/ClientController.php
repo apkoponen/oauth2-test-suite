@@ -35,6 +35,15 @@ class ClientController extends Controller
   ];
   // Valid Authorize URL (after authorization has been done).
   private $validAuthorizedUrl = 'https://local.wordpress.dev/wp-json/oauth2/v1/authorize/?client_id=uf2epI1LIpN9&redirect_uri=http%3A%2F%2Fhomestead.app%2Fclient%2Ftests&response_type=code&state=A1ySVBrcgurkJ6KDDMlhXU1qNSPCHHHf&scope=*&_oauth2_nonce=96c93bbcbf&_wp_http_referer=%2Fwp-login.php%3Faction%3Doauth2_authorize%26state%3DA1ySVBrcgurkJ6KDDMlhXU1qNSPCHHHf%26response_type%3Dcode%26approval_prompt%3Dauto%26client_id%3Duf2epI1LIpN9%26redirect_uri%3Dhttp%253A%252F%252Fhomestead.app%252Fclient%252Ftests&_wpnonce=c2e5b3f270&_wp_http_referer=%2Fwp-login.php%3Faction%3Doauth2_authorize%26state%3DA1ySVBrcgurkJ6KDDMlhXU1qNSPCHHHf%26response_type%3Dcode%26approval_prompt%3Dauto%26client_id%3Duf2epI1LIpN9%26redirect_uri%3Dhttp%253A%252F%252Fhomestead.app%252Fclient%252Ftests&wp-submit=authorize';
+  private $scopeHandling = [
+      'limitedScope' => ['read', 'import', 'export'],
+      'inLimitedScope' => ['read', 'import'],
+      'notInLimitedScope' => ['import', 'edit_posts'],
+      'invalidScope' => ['Invalid,', '$c0p3-*'],
+      'resourceInScope' => 'http://local.wordpress.dev/wp-json/wp/v2/users/me',
+      'resourceOutOfScope' => 'http://local.wordpress.dev/wp-json/wp/v2/posts?context=edit'
+  ];
+
   private $validTestParameters, $tests, $additionalURLs;
 
   public function __construct()
@@ -52,7 +61,8 @@ class ClientController extends Controller
         'redirectUri' => $this->validClient['redirectUri'],
         'urlAuthorize' => 'http://local.wordpress.dev/wp-json/oauth2/v1/authorize',
         'urlAccessToken' => 'http://local.wordpress.dev/wp-json/oauth2/v1/token',
-        'urlResourceOwnerDetails' => 'http://local.wordpress.dev/wp-json/wp/v2/users/me'
+        'urlResourceOwnerDetails' => 'http://local.wordpress.dev/wp-json/wp/v2/users/me',
+        'scopeSeparator' => ' '
     ];
 
     $this->tests = [
@@ -65,6 +75,9 @@ class ClientController extends Controller
         'client/csrf_token_endpoint' => 'testCsrfTokenEndpoint',
         'client/authorization_code_reuse' => 'testAuthorizationCodeReuse',
         'client/refresh_token_reuse' => 'testRefreshTokenReuse',
+        'client/scope_access_handling' => 'testScopeAccessHandling',
+        'client/refresh_scope_handling' => 'testRefreshScopeHandling',
+        'client/invalid_scope_handling' => 'testInvalidScopeHandling'
     ];
 
     $this->additionalURLs = [
@@ -579,8 +592,237 @@ class ClientController extends Controller
             function() {
           return true;
         });
+        return $this->endTest($request);
+      }
+    }
+  }
+
+  /**
+   * 'client/scope_access_handling' handling
+   *
+   * @param string $testName
+   * @param Request $request
+   */
+  private function testScopeAccessHandling($testName, Request $request)
+  {
+    $test     = Test::describe($testName, 'Using a token with a limited scope');
+    $testParameters = $this->validTestParameters;
+    $testParameters['scopes'] = $this->scopeHandling['limitedScope'];
+    $provider = new OAuth2Provider($testParameters);
+    $code     = $request->input('code');
+
+    // If we don't have an authorization code then get one
+    if (empty($code)) {
+      $this->startMultiStepTest($testName, $request);
+      $authorizationUrl = $provider->getAuthorizationUrl();
+      return redirect($authorizationUrl);
+    } else {
+
+      // Try to get an access token using the authorization code grant.
+      $accessToken = $provider->getAccessToken('authorization_code',
+          [ 'code' => $code]);
+
+      $refreshToken = $accessToken->getRefreshToken();
+      
+      try {
+        $test->should('should be able to access a protected resource in scope.',
+            function() {
+          return true;
+        });
+
+        $inScopeRequest = $provider->getAuthenticatedRequest(
+            'GET',
+            $this->scopeHandling['resourceInScope'],
+            $accessToken
+        );
+        
+        $this->client->send($inScopeRequest);
+      } catch (\Exception $e) {
+        $test->should('should be able to access a protected resource in scope.',
+            function() {
+          return false;
+        });
         return $this->endTest($request, $e->getMessage());
       }
+
+      try {
+        $outOfScopeRequest = $provider->getAuthenticatedRequest(
+            'GET',
+            $this->scopeHandling['resourceOutOfScope'],
+            $accessToken
+        );
+        $this->client->send($outOfScopeRequest);
+
+        $test->should('should not be able to access a protected resource not in scope.',
+            function() {
+          return false;
+        });
+
+      } catch (\Exception $e) {
+        $test->should('should not be able to access a protected resource not in scope.',
+            function() {
+          return true;
+        });
+      }
+
+      try {
+        // Get a new token
+        $accessToken2 = $provider->getAccessToken('refresh_token',
+          ['refresh_token' => $refreshToken]);
+
+        $test->should('should be able to get a second access token with the refresh token.',
+            function() {
+          return true;
+        });
+      } catch (\Exception $e) {
+        $test->should('should be able to get a second access token with the refresh token.',
+            function() {
+          return false;
+        });
+
+        $this->endTest($request, $e->getMessage());
+      }
+
+      try {
+        $test->should('the second access token should be able to access a protected resource in scope.',
+            function() {
+          return true;
+        });
+
+        $inScopeRequest2 = $provider->getAuthenticatedRequest(
+            'GET',
+            $this->scopeHandling['resourceInScope'],
+            $accessToken2
+        );
+
+        $this->client->send($inScopeRequest2);
+      } catch (\Exception $e) {
+        $test->should('the second access token should be able to access a protected resource in scope.',
+            function() {
+          return false;
+        });
+        return $this->endTest($request, $e->getMessage());
+      }
+
+      try {
+        $outOfScopeRequest2 = $provider->getAuthenticatedRequest(
+            'GET',
+            $this->scopeHandling['resourceOutOfScope'],
+            $accessToken2
+        );
+        $this->client->send($outOfScopeRequest2);
+
+        $test->should('the second access token should not be able to access a protected resource not in scope.',
+            function() {
+          return false;
+        });
+
+        return $this->endTest($request);
+      } catch (\Exception $e) {
+        $test->should('the second access token should not be able to access a protected resource not in scope.',
+            function() {
+          return true;
+        });
+      }
+
+      return $this->endTest($request);
+    }
+  }
+
+  /**
+   * 'client/refresh_scope_handling' handling
+   *
+   * @param string $testName
+   * @param Request $request
+   */
+  private function testRefreshScopeHandling($testName, Request $request)
+  {
+    $test     = Test::describe($testName, 'When using a refresh token with a limited scope');
+    $testParameters = $this->validTestParameters;
+    $testParameters['scopes'] = $this->scopeHandling['limitedScope'];
+    $provider = new OAuth2Provider($testParameters);
+    $scopeSeparator = $this->validTestParameters['scopeSeparator'];
+    $code     = $request->input('code');
+
+    // Start test if we don't have a code
+    if (empty($code)) {
+      $this->startMultiStepTest($testName, $request);
+      $authorizationUrl = $provider->getAuthorizationUrl();
+      return redirect($authorizationUrl);
+    } else {
+      // Try to get an access token using the authorization code grant.
+      $accessToken = $provider->getAccessToken('authorization_code',
+          [ 'code' => $code]);
+
+      $refreshToken = $accessToken->getRefreshToken();
+
+      try {
+        $provider->getAccessToken('refresh_token', [
+            'refresh_token' => $refreshToken,
+            'scope' => implode($scopeSeparator, $this->scopeHandling['notInLimitedScope'])
+            ]);
+
+        $test->should('token request with scopes not included in refresh token scope should fail.',
+            function() {
+          return false;
+        });
+      } catch (\Exception $e) {
+        $test->should('token request with scopes not included in refresh token scope should fail.',
+            function() {
+          return true;
+        });
+      }
+
+      try {
+        $provider->getAccessToken('refresh_token', [
+            'refresh_token' => $refreshToken,
+            'scope' => implode($scopeSeparator, $this->scopeHandling['inLimitedScope'])
+            ]);
+
+        $test->should('token request with scopes included in refresh token scope should succeed.',
+            function() {
+          return true;
+        });
+      } catch (\Exception $e) {
+        $test->should('token request with scopes included in refresh token scope should succeed.',
+            function() {
+          return false;
+        });
+      }
+
+      return $this->endTest($request);
+    }
+  }
+
+
+  /**
+   * 'client/invalid_scope_handling' handling
+   *
+   * @param string $testName
+   * @param Request $request
+   */
+  private function testInvalidScopeHandling($testName, Request $request)
+  {
+    $test     = Test::describe($testName, 'If trying to authorize with an invalid scope');
+    $testParameters = $this->validTestParameters;
+    $testParameters['scopes'] = $this->scopeHandling['invalidScope'];
+    $provider = new OAuth2Provider($testParameters);
+    $code     = $request->input('code');
+    $testPreviouslyStarted         = $request->session()->get('test') === $testName;
+
+    // Start test if we don't have a code and the test has not been previously started
+    if (!$testPreviouslyStarted) {
+      $this->startMultiStepTest($testName, $request);
+      $authorizationUrl = $provider->getAuthorizationUrl();
+      return redirect($authorizationUrl);
+    } else {
+      $test->should('the authorization should fail.',
+          function() use ($code) {
+        // If the test has been started and we don't have a code, the test
+        // succeeded (user returned back to the page).
+        return empty($code);
+      });
+      return $this->endTest($request);
     }
   }
 
