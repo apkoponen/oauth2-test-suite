@@ -170,7 +170,6 @@ class ClientController extends Controller
             function() {
           return false;
         });
-        Log::error($e);
       }
 
       $request->session()->forget('oauth2state');
