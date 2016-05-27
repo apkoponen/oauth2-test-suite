@@ -15,8 +15,8 @@ class ServerController extends Controller
         $test->should('contain a non-empty state GET-parameter', function() use ($request) {
             return !empty($request->query('state'));
         });
-        $test->should('contain a state parameter longer than 8 chars', function() use ($request) {
-            return (count($request->query('state')) >= 8);
+        $test->should('contain a state parameter longer than 26 chars', function() use ($request) {
+            return (count($request->query('state')) >= 26);
         });
         $test->should('be done over HTTPS', function() use ($request) {
             return $request->secure();
