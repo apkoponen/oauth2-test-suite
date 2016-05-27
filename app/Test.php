@@ -58,7 +58,7 @@ class Test extends Model
      */
     public function cases()
     {
-        return $this->hasMany('App\TestCase');
+        return $this->hasMany('App\TestCase')->orderBy('updated_at', 'desc');
     }
 
     /**

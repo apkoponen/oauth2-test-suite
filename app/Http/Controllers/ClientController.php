@@ -97,7 +97,8 @@ class ClientController extends Controller
       TestCase::truncate();
     }
 
-    $tests        = Test::with('cases')->where('name', 'LIKE', 'client/%')->get();
+    $tests        = Test::with('cases')->where('name', 'LIKE', 'client/%')
+        ->orderBy('updated_at', 'desc')->get();
     $testsForView = Test::prepareTestsForView($tests);
     $testNavItems = [];
     foreach ($this->tests as $test => $name) {
