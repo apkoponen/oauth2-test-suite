@@ -608,7 +608,7 @@ class ClientController extends Controller
     $request->session()->pull('test');
     $path = $request->path();
     if ($error !== '') {
-      $path = $path.'?error='.$error;
+      $path = $path.'?error=' . urlencode($error);
     }
     return redirect($path);
   }
