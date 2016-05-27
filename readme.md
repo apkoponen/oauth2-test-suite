@@ -8,7 +8,7 @@ AbstractProvider.
 
 The test suite was built for my Master's Thesis
 
-# How to use
+## How to use
 
 @TODO. List of the subset of AbstractProvider's methods that are required.
 
