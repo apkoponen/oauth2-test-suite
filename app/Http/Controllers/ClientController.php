@@ -72,7 +72,7 @@ class ClientController extends Controller
         'client/bruteforce_client_credentials' => 'testbruteforceClientCredentials',
         'client/open_redirect_authorize_real_credentials' => 'testOpenRedirectAuthorizeRealCredentials',
         'client/open_redirect_authorize_fake_credentials' => 'testOpenRedirectAuthorizeFakeCredentials',
-        'client/csrf_token_endpoint' => 'testCsrfTokenEndpoint',
+        'client/csrf_authorization_endpoint' => 'testCsrfAuthorizationEndpoint',
         'client/authorization_code_reuse' => 'testAuthorizationCodeReuse',
         'client/refresh_token_reuse' => 'testRefreshTokenReuse',
         'client/scope_access_handling' => 'testScopeAccessHandling',
@@ -467,12 +467,12 @@ class ClientController extends Controller
   }
 
   /**
-   * 'client/csrf_token_endpoint' handling
+   * 'client/csrf_authorization_endpoint' handling
    *
    * @param string $testName
    * @param Request $request
    */
-  private function testCsrfTokenEndpoint($testName, Request $request)
+  private function testCsrfAuthorizationEndpoint($testName, Request $request)
   {
     $test                  = Test::describe($testName,
             'When trying to reuse an authorization URL with different client_id and matching redirect_uri');
